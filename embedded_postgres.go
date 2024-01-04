@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"syscall"
 )
 
 var mu sync.Mutex
@@ -86,10 +87,10 @@ func (ep *EmbeddedPostgres) Start() error {
 	if ep.config.dataPath == "" {
 		ep.config.dataPath = filepath.Join(ep.config.runtimePath, "data")
 	}
-
-	if err := os.RemoveAll(ep.config.runtimePath); err != nil {
-		return fmt.Errorf("unable to clean up runtime directory %s with error: %s", ep.config.runtimePath, err)
-	}
+	os.MkdirAll(ep.config.dataPath, os.ModePerm)
+	// if err := os.RemoveAll(ep.config.runtimePath); err != nil {
+	// 	return fmt.Errorf("unable to clean up runtime directory %s with error: %s", ep.config.runtimePath, err)
+	// }
 
 	if ep.config.binariesPath == "" {
 		ep.config.binariesPath = ep.config.runtimePath
@@ -106,10 +107,10 @@ func (ep *EmbeddedPostgres) Start() error {
 	reuseData := dataDirIsValid(ep.config.dataPath, ep.config.version)
 
 	if !reuseData {
-		fmt.Printf("DB Init\n")
-		// if err := ep.cleanDataDirectoryAndInit(); err != nil {
-		// 	return err
-		// }
+		fmt.Printf("Creating a new data directory for %s at %s\n", ep.config.version, ep.config.dataPath)
+		if err := ep.cleanDataDirectoryAndInit(); err != nil {
+			return err
+		}
 	}
 
 	if err := startPostgres(ep); err != nil {
@@ -164,9 +165,9 @@ func (ep *EmbeddedPostgres) downloadAndExtractBinary(cacheExists bool, cacheLoca
 }
 
 func (ep *EmbeddedPostgres) cleanDataDirectoryAndInit() error {
-	if err := os.RemoveAll(ep.config.dataPath); err != nil {
-		return fmt.Errorf("unable to clean up data directory %s with error: %s", ep.config.dataPath, err)
-	}
+	// if err := os.RemoveAll(ep.config.dataPath); err != nil {
+	// 	return fmt.Errorf("unable to clean up data directory %s with error: %s", ep.config.dataPath, err)
+	// }
 
 	if err := ep.initDatabase(ep.config.binariesPath, ep.config.runtimePath, ep.config.dataPath, ep.config.username, ep.config.password, ep.config.locale, ep.syncedLogger.file); err != nil {
 		return err
@@ -204,17 +205,27 @@ func encodeOptions(port uint32, parameters map[string]string) string {
 }
 
 func startPostgres(ep *EmbeddedPostgres) error {
+	fmt.Printf("Start-- postgres\n")
+	os.MkdirAll(ep.config.dataPath, os.ModePerm)
 	postgresBinary := filepath.Join(ep.config.binariesPath, "bin/pg_ctl")
-	postgresProcess := exec.Command(postgresBinary, "start", "-w",
+
+	if err := ep.initDatabase(ep.config.binariesPath, ep.config.runtimePath, ep.config.dataPath, ep.config.username, ep.config.password, ep.config.locale, ep.syncedLogger.file); err != nil {
+		return err
+	}
+
+
+	args := []string{postgresBinary, "start", "-w", "-s",
+		"-D", ep.config.dataPath,
+		"-o", encodeOptions(ep.config.port, ep.config.startParameters)}
+
+	os.WriteFile("start.txt", []byte(strings.Join(args, " ")), 0644)
+
+	postgresProcess := exec.Command(postgresBinary, "start", "-w", "-s",
 		"-D", ep.config.dataPath,
 		"-o", encodeOptions(ep.config.port, ep.config.startParameters))
-
-	fmt.Printf("\n%v %v %v %v %v %v %v\n", postgresBinary, "start", "-w",
-	"-D", ep.config.dataPath,
-	"-o", encodeOptions(ep.config.port, ep.config.startParameters))
-
 	postgresProcess.Stdout = ep.syncedLogger.file
 	postgresProcess.Stderr = ep.syncedLogger.file
+	postgresProcess.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
 
 	if err := postgresProcess.Run(); err != nil {
 		_ = ep.syncedLogger.flush()
@@ -227,9 +238,14 @@ func startPostgres(ep *EmbeddedPostgres) error {
 }
 
 func stopPostgres(ep *EmbeddedPostgres) error {
+	fmt.Printf("Stopping postgres\n")
 	postgresBinary := filepath.Join(ep.config.binariesPath, "bin/pg_ctl")
-	postgresProcess := exec.Command(postgresBinary, "stop", "-w",
+	postgresProcess := exec.Command(postgresBinary, "stop", "-w", "-s",
 		"-D", ep.config.dataPath)
+	postgresProcess.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow: true,
+	}
+
 	postgresProcess.Stderr = ep.syncedLogger.file
 	postgresProcess.Stdout = ep.syncedLogger.file
 
@@ -262,6 +278,6 @@ func dataDirIsValid(dataDir string, version PostgresVersion) bool {
 	return true
 
 	v := strings.TrimSuffix(string(d), "\n")
-    fmt.Printf("'%s'=='%s'\n", version, v)
+
 	return strings.HasPrefix(string(version), v)
 }

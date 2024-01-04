@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
+	"syscall"
 
 	"github.com/lib/pq"
 )
@@ -22,6 +24,15 @@ type initDatabase func(binaryExtractLocation, runtimePath, pgDataDir, username, 
 type createDatabase func(port uint32, username, password, database string) error
 
 func defaultInitDatabase(binaryExtractLocation, runtimePath, pgDataDir, username, password, locale string, logger *os.File) error {
+	{
+		files, err := os.ReadDir(pgDataDir)
+		if err != nil || len(files) > 0{
+			fmt.Printf("Keep it\n")
+			return nil
+		}
+	}
+
+
 	passwordFile, err := createPasswordFile(runtimePath, password)
 	if err != nil {
 		return err
@@ -40,8 +51,13 @@ func defaultInitDatabase(binaryExtractLocation, runtimePath, pgDataDir, username
 
 	postgresInitDBBinary := filepath.Join(binaryExtractLocation, "bin/initdb")
 	postgresInitDBProcess := exec.Command(postgresInitDBBinary, args...)
+	postgresInitDBProcess.SysProcAttr = &syscall.SysProcAttr{
+		HideWindow: true,
+	}
+	os.WriteFile("initArgs.txt", []byte(postgresInitDBBinary + " "+strings.Join(args, " ")), 0777)
 	postgresInitDBProcess.Stderr = logger
 	postgresInitDBProcess.Stdout = logger
+	fmt.Printf("default DB\n")
 
 	if err = postgresInitDBProcess.Run(); err != nil {
 		logContent, readLogsErr := readLogsOrTimeout(logger) // we want to preserve the original error
@@ -51,16 +67,18 @@ func defaultInitDatabase(binaryExtractLocation, runtimePath, pgDataDir, username
 		return fmt.Errorf("unable to init database using '%s': %w\n%s", postgresInitDBProcess.String(), err, string(logContent))
 	}
 
-	if err = os.Remove(passwordFile); err != nil {
-		return fmt.Errorf("unable to remove password file '%v': %w", passwordFile, err)
-	}
+	// if err = os.Remove(passwordFile); err != nil {
+	// 	return fmt.Errorf("unable to remove password file '%v': %w", passwordFile, err)
+	// }
 
 	return nil
 }
 
 func createPasswordFile(runtimePath, password string) (string, error) {
 	passwordFileLocation := filepath.Join(runtimePath, "pwfile")
+	//fmt.Printf("pwfile location1: %s\n", passwordFileLocation)
 	if err := os.WriteFile(passwordFileLocation, []byte(password), 0600); err != nil {
+		//fmt.Printf("Failed pwfile location: %s\n", passwordFileLocation)
 		return "", fmt.Errorf("unable to write password file to %s", passwordFileLocation)
 	}
 
