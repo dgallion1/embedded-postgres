@@ -67,9 +67,9 @@ func defaultInitDatabase(binaryExtractLocation, runtimePath, pgDataDir, username
 		return fmt.Errorf("unable to init database using '%s': %w\n%s", postgresInitDBProcess.String(), err, string(logContent))
 	}
 
-	// if err = os.Remove(passwordFile); err != nil {
-	// 	return fmt.Errorf("unable to remove password file '%v': %w", passwordFile, err)
-	// }
+	if err = os.Remove(passwordFile); err != nil {
+		return fmt.Errorf("unable to remove password file '%v': %w", passwordFile, err)
+	}
 
 	return nil
 }
