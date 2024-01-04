@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 	"syscall"
 
 	"github.com/lib/pq"
@@ -54,7 +53,7 @@ func defaultInitDatabase(binaryExtractLocation, runtimePath, pgDataDir, username
 	postgresInitDBProcess.SysProcAttr = &syscall.SysProcAttr{
 		HideWindow: true,
 	}
-	os.WriteFile("initArgs.txt", []byte(postgresInitDBBinary + " "+strings.Join(args, " ")), 0777)
+	//os.WriteFile("initArgs.txt", []byte(postgresInitDBBinary + " "+strings.Join(args, " ")), 0777)
 	postgresInitDBProcess.Stderr = logger
 	postgresInitDBProcess.Stdout = logger
 	fmt.Printf("default DB\n")

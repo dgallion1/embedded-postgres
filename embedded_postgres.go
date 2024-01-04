@@ -214,11 +214,11 @@ func startPostgres(ep *EmbeddedPostgres) error {
 	}
 
 
-	args := []string{postgresBinary, "start", "-w", "-s",
-		"-D", ep.config.dataPath,
-		"-o", encodeOptions(ep.config.port, ep.config.startParameters)}
+	// args := []string{postgresBinary, "start", "-w", "-s",
+	// 	"-D", ep.config.dataPath,
+	// 	"-o", encodeOptions(ep.config.port, ep.config.startParameters)}
 
-	os.WriteFile("start.txt", []byte(strings.Join(args, " ")), 0644)
+	//os.WriteFile("start.txt", []byte(strings.Join(args, " ")), 0644)
 
 	postgresProcess := exec.Command(postgresBinary, "start", "-w", "-s",
 		"-D", ep.config.dataPath,
